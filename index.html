@@ -308,6 +308,7 @@
       </label>
       <label>Attach PDF
         <input type="file" id="docFile" accept="application/pdf" />
+        <span style="font-size:11px; color:#8a9595; font-weight:400;">Leave blank when editing to keep the current attachment.</span>
       </label>
       <button type="submit" class="save-btn" id="doc-save-btn">Save entry</button>
     </form>
@@ -346,6 +347,7 @@
   let allItems = [];
   let allDocs = [];
   let editingId = null;
+  let editingDocId = null;
   let currentAnalyzer = null;
   let currentView = "home"; // home | equipment | stock-list | doc-list
   let currentCategory = null;
@@ -524,6 +526,21 @@
     categoryTiles.innerHTML = html;
   }
 
+  function formatDisplayDate(str) {
+    if (!str) return "";
+    const d = new Date(str);
+    if (isNaN(d.getTime())) return escapeHtml(str);
+    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  }
+
+  function toDateInputValue(str) {
+    if (!str) return "";
+    const d = new Date(str);
+    if (isNaN(d.getTime())) return "";
+    const pad = function (n) { return String(n).padStart(2, "0"); };
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+  }
+
   function renderDocList() {
     const docs = allDocs.filter(function (d) { return (d.Analyzer || "") === currentAnalyzer && d.Category === currentCategory; });
     if (!docs.length) {
@@ -535,7 +552,7 @@
     docs.forEach(function (d) {
       html += '<div class="card">';
       html += '<div class="item-name">' + escapeHtml(d.Description) + "</div>";
-      if (d.Date) html += '<div class="doc-date">' + escapeHtml(d.Date) + "</div>";
+      if (d.Date) html += '<div class="doc-date">' + formatDisplayDate(d.Date) + "</div>";
       if (d.Amount) html += '<div class="doc-amount">₹ ' + escapeHtml(d.Amount) + "</div>";
       if (d.FileUrl) {
         html += '<a class="doc-file-link" href="' + escapeHtml(d.FileUrl) + '" target="_blank" rel="noopener">';
@@ -543,7 +560,10 @@
         html += escapeHtml(d.FileName || "View PDF") + "</a>";
       }
       if (d.ID) {
-        html += '<div class="card-actions"><button type="button" class="chip-btn danger" onclick="confirmDeleteDoc(\'' + escapeHtml(d.ID) + '\')">Delete</button></div>';
+        html += '<div class="card-actions">';
+        html += '<button type="button" class="chip-btn" onclick="startEditDoc(\'' + escapeHtml(d.ID) + '\')">Edit</button>';
+        html += '<button type="button" class="chip-btn danger" onclick="confirmDeleteDoc(\'' + escapeHtml(d.ID) + '\')">Delete</button>';
+        html += "</div>";
       }
       html += "</div>";
     });
@@ -746,6 +766,7 @@
 
   function openDocForm() {
     docForm.reset();
+    editingDocId = null;
     document.getElementById("doc-sheet-title").textContent = "New entry";
     docSaveBtn.textContent = "Save entry";
     docOverlay.classList.remove("hidden");
@@ -754,9 +775,25 @@
   function closeDocForm() {
     docOverlay.classList.add("hidden");
     docForm.reset();
+    editingDocId = null;
+    document.getElementById("doc-sheet-title").textContent = "New entry";
+    docSaveBtn.textContent = "Save entry";
   }
   function closeDocFormBg(e) {
     if (e.target === docOverlay) closeDocForm();
+  }
+
+  function startEditDoc(id) {
+    const d = allDocs.find(function (x) { return String(x.ID) === String(id); });
+    if (!d) return;
+    editingDocId = id;
+    document.getElementById("docDate").value = toDateInputValue(d.Date);
+    document.getElementById("docDescription").value = d.Description || "";
+    document.getElementById("docAmount").value = d.Amount || "";
+    document.getElementById("docFile").value = "";
+    document.getElementById("doc-sheet-title").textContent = "Edit entry";
+    docSaveBtn.textContent = "Update entry";
+    docOverlay.classList.remove("hidden");
   }
 
   async function confirmDeleteDoc(id) {
@@ -798,10 +835,11 @@
     const fileInput = document.getElementById("docFile");
     const file = fileInput.files[0];
     docSaveBtn.disabled = true;
-    docSaveBtn.textContent = "Saving…";
+    docSaveBtn.textContent = editingDocId ? "Updating…" : "Saving…";
     try {
       const payload = {
-        action: "createDoc",
+        action: editingDocId ? "updateDoc" : "createDoc",
+        id: editingDocId || undefined,
         analyzer: currentAnalyzer,
         category: currentCategory,
         date: document.getElementById("docDate").value,
@@ -827,10 +865,10 @@
       clearBanner();
       await loadItems();
     } catch (err) {
-      showBanner("Couldn't save this entry. Please try again.", "error");
+      showBanner("Couldn't save this entry: " + (err && err.message ? err.message : err), "error");
     }
     docSaveBtn.disabled = false;
-    docSaveBtn.textContent = "Save entry";
+    docSaveBtn.textContent = editingDocId ? "Update entry" : "Save entry";
   });
 
   setView("home");
