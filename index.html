@@ -127,6 +127,12 @@
     border: 1px solid var(--line); background: #fff; color: var(--teal); cursor: pointer;
   }
   .chip-btn.danger { color: var(--danger-ink); border-color: #f0d3d0; }
+  .doc-file-link {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600;
+    color: var(--teal); margin-top: 8px; text-decoration: none;
+  }
+  .doc-amount { font-size: 13px; color: #374242; font-weight: 600; margin-top: 4px; }
+  .doc-date { font-size: 11.5px; color: var(--muted); }
 
   .fab {
     position: fixed; bottom: 20px; right: 18px; width: 54px; height: 54px;
@@ -192,9 +198,19 @@
     </div>
   </div>
 
-  <div id="list-view" class="hidden">
+  <div id="equipment-view" class="hidden">
     <div class="list-header-row">
       <button class="back-btn" onclick="showHome()" aria-label="Back">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0f4c4c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <div class="list-title" id="equipment-title">Analyzer</div>
+    </div>
+    <div class="tile-grid" id="category-tiles"></div>
+  </div>
+
+  <div id="list-view" class="hidden">
+    <div class="list-header-row">
+      <button class="back-btn" onclick="showEquipment(currentAnalyzer)" aria-label="Back">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0f4c4c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
       </button>
       <div class="list-title" id="list-title">Analyzer</div>
@@ -206,9 +222,21 @@
       <div class="center-row">Loading stock…</div>
     </div>
   </div>
+
+  <div id="doc-view" class="hidden">
+    <div class="list-header-row">
+      <button class="back-btn" onclick="showEquipment(currentAnalyzer)" aria-label="Back">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0f4c4c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <div class="list-title" id="doc-title">Purchase Requests</div>
+    </div>
+    <div id="doc-list-area">
+      <div class="center-row">Loading…</div>
+    </div>
+  </div>
 </main>
 
-<button class="fab" onclick="openForm()" aria-label="New item">
+<button class="fab" id="fab-btn" onclick="handleFabClick()" aria-label="New">
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 </button>
 
@@ -260,6 +288,32 @@
   </div>
 </div>
 
+<div class="overlay hidden" id="doc-overlay" onclick="closeDocFormBg(event)">
+  <div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-header">
+      <span class="sheet-title" id="doc-sheet-title">New entry</span>
+      <button class="icon-btn" style="background:#eef2f1;" onclick="closeDocForm()" aria-label="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5b6b6b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form id="doc-form">
+      <label>Date
+        <input type="date" id="docDate" />
+      </label>
+      <label>Description *
+        <input type="text" id="docDescription" placeholder="e.g. Reorder of STA Cuvette, 2 boxes" required />
+      </label>
+      <label>Amount
+        <input type="text" id="docAmount" placeholder="e.g. 12500" inputmode="decimal" />
+      </label>
+      <label>Attach PDF
+        <input type="file" id="docFile" accept="application/pdf" />
+      </label>
+      <button type="submit" class="save-btn" id="doc-save-btn">Save entry</button>
+    </form>
+  </div>
+</div>
+
 <script>
   // ================================================================
   // PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE. It looks like:
@@ -270,19 +324,36 @@
 
   const bannerArea = document.getElementById("banner-area");
   const homeView = document.getElementById("home-view");
+  const equipmentView = document.getElementById("equipment-view");
   const listView = document.getElementById("list-view");
+  const docView = document.getElementById("doc-view");
   const tileArea = document.getElementById("tile-area");
+  const categoryTiles = document.getElementById("category-tiles");
+  const equipmentTitle = document.getElementById("equipment-title");
   const listArea = document.getElementById("list-area");
   const listTitle = document.getElementById("list-title");
+  const docListArea = document.getElementById("doc-list-area");
+  const docTitle = document.getElementById("doc-title");
   const headerTitle = document.getElementById("header-title");
   const headerSubtitle = document.getElementById("header-subtitle");
   const overlay = document.getElementById("overlay");
   const form = document.getElementById("item-form");
   const saveBtn = document.getElementById("save-btn");
+  const docOverlay = document.getElementById("doc-overlay");
+  const docForm = document.getElementById("doc-form");
+  const docSaveBtn = document.getElementById("doc-save-btn");
   const searchBox = document.getElementById("search-box");
   let allItems = [];
+  let allDocs = [];
   let editingId = null;
-  let currentAnalyzer = null; // null = home view
+  let currentAnalyzer = null;
+  let currentView = "home"; // home | equipment | stock-list | doc-list
+  let currentCategory = null;
+  const CATEGORIES = [
+    { key: "Purchase Request", label: "Purchase Requests" },
+    { key: "Supply Order", label: "Supply Orders" },
+    { key: "Purchase Bill", label: "Purchase Bills" },
+  ];
 
   function showBanner(msg, type) {
     bannerArea.innerHTML = '<div class="banner ' + type + '">' + msg + "</div>";
@@ -349,52 +420,135 @@
       showBanner("Setup needed: paste your Google Apps Script URL into index.html (see SCRIPT_URL near the top of the script).", "error");
       return;
     }
-    if (currentAnalyzer === null) {
-      tileArea.innerHTML = '<div class="center-row">Loading equipment…</div>';
-    } else {
-      listArea.innerHTML = '<div class="center-row">Loading stock…</div>';
-    }
+    if (currentView === "home") tileArea.innerHTML = '<div class="center-row">Loading equipment…</div>';
+    if (currentView === "stock-list") listArea.innerHTML = '<div class="center-row">Loading stock…</div>';
+    if (currentView === "doc-list") docListArea.innerHTML = '<div class="center-row">Loading…</div>';
     try {
       const res = await fetch(SCRIPT_URL);
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Unknown error");
       allItems = data.items || [];
+      allDocs = data.documents || [];
       clearBanner();
       render();
     } catch (err) {
-      showBanner("Couldn't load stock. Check your connection and try refreshing.", "error");
+      showBanner("Couldn't load data. Check your connection and try refreshing.", "error");
       tileArea.innerHTML = "";
       listArea.innerHTML = "";
+      docListArea.innerHTML = "";
     }
   }
 
   function render() {
-    if (currentAnalyzer === null) {
-      renderHome();
-    } else {
-      renderListView();
-    }
+    if (currentView === "home") renderHome();
+    else if (currentView === "equipment") renderEquipment();
+    else if (currentView === "stock-list") renderListView();
+    else if (currentView === "doc-list") renderDocList();
+  }
+
+  function setView(v) {
+    currentView = v;
+    homeView.classList.toggle("hidden", v !== "home");
+    equipmentView.classList.toggle("hidden", v !== "equipment");
+    listView.classList.toggle("hidden", v !== "stock-list");
+    docView.classList.toggle("hidden", v !== "doc-list");
+    const fabBtn = document.getElementById("fab-btn");
+    fabBtn.style.display = (v === "stock-list" || v === "doc-list") ? "flex" : "none";
+  }
+
+  function handleFabClick() {
+    if (currentView === "stock-list") openForm();
+    else if (currentView === "doc-list") openDocForm();
   }
 
   function showHome() {
     currentAnalyzer = null;
-    searchBox.value = "";
+    currentCategory = null;
     headerTitle.textContent = "Coagulation Stock";
     headerSubtitle.textContent = "Reagents & consumables tracker";
-    homeView.classList.remove("hidden");
-    listView.classList.add("hidden");
+    setView("home");
+    render();
+  }
+
+  function showEquipment(analyzer) {
+    currentAnalyzer = analyzer;
+    currentCategory = null;
+    headerTitle.textContent = analyzer;
+    headerSubtitle.textContent = "Choose a section";
+    equipmentTitle.textContent = analyzer;
+    setView("equipment");
     render();
   }
 
   function showList(analyzer) {
     currentAnalyzer = analyzer;
-    searchBox.value = "";
+    if (searchBox) searchBox.value = "";
     headerTitle.textContent = analyzer;
     headerSubtitle.textContent = "Tap + to add an item here";
-    listTitle.textContent = analyzer;
-    homeView.classList.add("hidden");
-    listView.classList.remove("hidden");
+    listTitle.textContent = analyzer + " · Stock";
+    setView("stock-list");
     render();
+  }
+
+  function showDocList(category) {
+    currentCategory = category;
+    const label = CATEGORIES.find(function (c) { return c.key === category; }).label;
+    headerTitle.textContent = currentAnalyzer;
+    headerSubtitle.textContent = label;
+    docTitle.textContent = currentAnalyzer + " · " + label;
+    setView("doc-list");
+    render();
+  }
+
+  function renderEquipment() {
+    const scoped = allItems.filter(function (it) { return (it.Analyzer || "Other") === currentAnalyzer; });
+    const lowCount = scoped.filter(function (it) { return isLowStock(it.InStock, it.ReorderLevel); }).length;
+    const warnCount = scoped.filter(function (it) { return expiryStatus(it.Expiry) !== "ok"; }).length;
+
+    let html = "";
+    html += '<div class="tile" onclick="showList(\'' + escapeHtml(currentAnalyzer).replace(/'/g, "&#39;") + '\')">';
+    html += '<div class="tile-left"><div class="tile-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0f4c4c" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v6.5a4 4 0 0 1-1 2.5L3.5 16A3 3 0 0 0 6 21h12a3 3 0 0 0 2.5-5l-4.5-5a4 4 0 0 1-1-2.5V2"/><path d="M6 2h12"/></svg></div>';
+    html += '<div><div class="tile-name">Stock</div><div class="tile-count">' + scoped.length + (scoped.length === 1 ? " item" : " items") + "</div></div></div>";
+    html += '<div class="tile-badges">';
+    if (lowCount) html += '<span class="tile-badge low">' + lowCount + " low</span>";
+    if (warnCount) html += '<span class="tile-badge warn">' + warnCount + " expiry</span>";
+    html += '<span class="chevron"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span></div></div>';
+
+    CATEGORIES.forEach(function (c) {
+      const count = allDocs.filter(function (d) { return (d.Analyzer || "") === currentAnalyzer && d.Category === c.key; }).length;
+      html += '<div class="tile" onclick="showDocList(\'' + c.key + '\')">';
+      html += '<div class="tile-left"><div class="tile-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0f4c4c" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>';
+      html += '<div><div class="tile-name">' + c.label + '</div><div class="tile-count">' + count + (count === 1 ? " entry" : " entries") + "</div></div></div>";
+      html += '<div class="tile-badges"><span class="chevron"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span></div></div>';
+    });
+    categoryTiles.innerHTML = html;
+  }
+
+  function renderDocList() {
+    const docs = allDocs.filter(function (d) { return (d.Analyzer || "") === currentAnalyzer && d.Category === currentCategory; });
+    if (!docs.length) {
+      docListArea.innerHTML = '<div class="empty"><div class="h">No entries yet</div><div class="s">Tap the + button to add the first one.</div></div>';
+      return;
+    }
+    docs.sort(function (a, b) { return new Date(b.Timestamp) - new Date(a.Timestamp); });
+    let html = '<div class="list">';
+    docs.forEach(function (d) {
+      html += '<div class="card">';
+      html += '<div class="item-name">' + escapeHtml(d.Description) + "</div>";
+      if (d.Date) html += '<div class="doc-date">' + escapeHtml(d.Date) + "</div>";
+      if (d.Amount) html += '<div class="doc-amount">₹ ' + escapeHtml(d.Amount) + "</div>";
+      if (d.FileUrl) {
+        html += '<a class="doc-file-link" href="' + escapeHtml(d.FileUrl) + '" target="_blank" rel="noopener">';
+        html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+        html += escapeHtml(d.FileName || "View PDF") + "</a>";
+      }
+      if (d.ID) {
+        html += '<div class="card-actions"><button type="button" class="chip-btn danger" onclick="confirmDeleteDoc(\'' + escapeHtml(d.ID) + '\')">Delete</button></div>';
+      }
+      html += "</div>";
+    });
+    html += "</div>";
+    docListArea.innerHTML = html;
   }
 
   function renderHome() {
@@ -418,7 +572,7 @@
       const lowCount = g.items.filter(function (it) { return isLowStock(it.InStock, it.ReorderLevel); }).length;
       const warnCount = g.items.filter(function (it) { return expiryStatus(it.Expiry) !== "ok"; }).length;
       const safeName = escapeHtml(g.name).replace(/'/g, "&#39;");
-      html += '<div class="tile" onclick="showList(\'' + safeName + '\')">';
+      html += '<div class="tile" onclick="showEquipment(\'' + safeName + '\')">';
       html += '<div class="tile-left">';
       html += '<div class="tile-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0f4c4c" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v6.5a4 4 0 0 1-1 2.5L3.5 16A3 3 0 0 0 6 21h12a3 3 0 0 0 2.5-5l-4.5-5a4 4 0 0 1-1-2.5V2"/><path d="M6 2h12"/></svg></div>';
       html += '<div><div class="tile-name">' + escapeHtml(g.name) + '</div><div class="tile-count">' + g.items.length + (g.items.length === 1 ? " item" : " items") + "</div></div>";
@@ -590,6 +744,96 @@
     saveBtn.textContent = editingId ? "Update item" : "Save item";
   });
 
+  function openDocForm() {
+    docForm.reset();
+    document.getElementById("doc-sheet-title").textContent = "New entry";
+    docSaveBtn.textContent = "Save entry";
+    docOverlay.classList.remove("hidden");
+    document.getElementById("docDescription").focus();
+  }
+  function closeDocForm() {
+    docOverlay.classList.add("hidden");
+    docForm.reset();
+  }
+  function closeDocFormBg(e) {
+    if (e.target === docOverlay) closeDocForm();
+  }
+
+  async function confirmDeleteDoc(id) {
+    if (!confirm("Delete this entry? The attached PDF will also be removed. This can't be undone.")) return;
+    try {
+      const res = await fetch(SCRIPT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "deleteDoc", id: id }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Delete failed");
+      await loadItems();
+    } catch (err) {
+      showBanner("Couldn't delete this entry. Please try again.", "error");
+    }
+  }
+
+  function fileToBase64(file) {
+    return new Promise(function (resolve, reject) {
+      const reader = new FileReader();
+      reader.onload = function () {
+        const result = reader.result;
+        const base64 = result.substring(result.indexOf(",") + 1);
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  docForm.addEventListener("submit", async function (e) {
+    e.preventDefault();
+    const description = document.getElementById("docDescription").value.trim();
+    if (!description) {
+      showBanner("Description is required.", "error");
+      return;
+    }
+    const fileInput = document.getElementById("docFile");
+    const file = fileInput.files[0];
+    docSaveBtn.disabled = true;
+    docSaveBtn.textContent = "Saving…";
+    try {
+      const payload = {
+        action: "createDoc",
+        analyzer: currentAnalyzer,
+        category: currentCategory,
+        date: document.getElementById("docDate").value,
+        description: description,
+        amount: document.getElementById("docAmount").value.trim(),
+        fileName: "",
+        fileData: "",
+        mimeType: "",
+      };
+      if (file) {
+        payload.fileName = file.name;
+        payload.mimeType = file.type || "application/pdf";
+        payload.fileData = await fileToBase64(file);
+      }
+      const res = await fetch(SCRIPT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Save failed");
+      closeDocForm();
+      clearBanner();
+      await loadItems();
+    } catch (err) {
+      showBanner("Couldn't save this entry. Please try again.", "error");
+    }
+    docSaveBtn.disabled = false;
+    docSaveBtn.textContent = "Save entry";
+  });
+
+  setView("home");
   loadItems();
 </script>
 
