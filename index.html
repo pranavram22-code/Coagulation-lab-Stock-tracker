@@ -417,6 +417,25 @@
     return isLowStock(inStock, reorderLevel) ? '<span class="stock-tag low">Low stock</span>' : "";
   }
 
+  function runwayTag(inStock, usageWeek) {
+    const stockNum = parseLeadingNumber(inStock);
+    const usageNum = parseLeadingNumber(usageWeek);
+    if (stockNum === null || usageNum === null || usageNum <= 0) return "";
+    const weeksLeft = stockNum / usageNum;
+    const daysLeft = Math.round(weeksLeft * 7);
+    let label;
+    if (weeksLeft < 1) {
+      label = daysLeft + (daysLeft === 1 ? " day left" : " days left");
+    } else {
+      const roundedWeeks = Math.round(weeksLeft * 10) / 10;
+      label = "~" + roundedWeeks + (roundedWeeks === 1 ? " week left" : " weeks left") + " (" + daysLeft + "d)";
+    }
+    let cls = "ok";
+    if (weeksLeft <= 1) cls = "expired";
+    else if (weeksLeft <= 3) cls = "warn";
+    return '<span class="expiry-tag ' + cls + '">' + label + "</span>";
+  }
+
   async function loadItems() {
     if (SCRIPT_URL.indexOf("PASTE_YOUR_SCRIPT_URL_HERE") !== -1) {
       showBanner("Setup needed: paste your Google Apps Script URL into index.html (see SCRIPT_URL near the top of the script).", "error");
@@ -652,7 +671,7 @@
       if (it.ToGiveBack) html += '<div class="stat"><span class="k">To give back:</span> <span class="v">' + escapeHtml(it.ToGiveBack) + "</span></div>";
       if (it.ReorderLevel) html += '<div class="stat"><span class="k">Reorder at:</span> <span class="v">' + escapeHtml(it.ReorderLevel) + "</span></div>";
       html += "</div>";
-      html += stockTag(it.InStock, it.ReorderLevel) + expiryTag(it.Expiry);
+      html += stockTag(it.InStock, it.ReorderLevel) + expiryTag(it.Expiry) + runwayTag(it.InStock, it.UsageWeek);
       if (it.ID) {
         html += '<div class="card-actions">';
         html += '<button type="button" class="chip-btn" onclick="startEdit(\'' + escapeHtml(it.ID) + '\')">Edit</button>';
