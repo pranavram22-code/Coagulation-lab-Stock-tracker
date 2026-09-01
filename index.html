@@ -269,6 +269,12 @@
           <input type="text" id="inStock" placeholder="e.g. 8" />
         </label>
       </div>
+      <label>Units per pack (only if In stock &amp; Usage/week use different units)
+        <input type="text" id="unitsPerPack" placeholder="e.g. 12 (if 1 kit = 12 vials)" />
+      </label>
+      <label>Batch number
+        <input type="text" id="batchNumber" placeholder="e.g. LOT-2026-0142" />
+      </label>
       <label>Reorder level
         <input type="text" id="reorderLevel" placeholder="Flag as low stock at or below this number" />
       </label>
@@ -417,11 +423,13 @@
     return isLowStock(inStock, reorderLevel) ? '<span class="stock-tag low">Low stock</span>' : "";
   }
 
-  function runwayTag(inStock, usageWeek) {
+  function runwayTag(inStock, usageWeek, unitsPerPack) {
     const stockNum = parseLeadingNumber(inStock);
     const usageNum = parseLeadingNumber(usageWeek);
     if (stockNum === null || usageNum === null || usageNum <= 0) return "";
-    const weeksLeft = stockNum / usageNum;
+    const conversion = parseLeadingNumber(unitsPerPack);
+    const stockInUsageUnits = stockNum * (conversion && conversion > 0 ? conversion : 1);
+    const weeksLeft = stockInUsageUnits / usageNum;
     const daysLeft = Math.round(weeksLeft * 7);
     let label;
     if (weeksLeft < 1) {
@@ -670,8 +678,9 @@
       if (it.ToGet) html += '<div class="stat"><span class="k">To get:</span> <span class="v">' + escapeHtml(it.ToGet) + "</span></div>";
       if (it.ToGiveBack) html += '<div class="stat"><span class="k">To give back:</span> <span class="v">' + escapeHtml(it.ToGiveBack) + "</span></div>";
       if (it.ReorderLevel) html += '<div class="stat"><span class="k">Reorder at:</span> <span class="v">' + escapeHtml(it.ReorderLevel) + "</span></div>";
+      if (it.BatchNumber) html += '<div class="stat"><span class="k">Batch:</span> <span class="v">' + escapeHtml(it.BatchNumber) + "</span></div>";
       html += "</div>";
-      html += stockTag(it.InStock, it.ReorderLevel) + expiryTag(it.Expiry) + runwayTag(it.InStock, it.UsageWeek);
+      html += stockTag(it.InStock, it.ReorderLevel) + expiryTag(it.Expiry) + runwayTag(it.InStock, it.UsageWeek, it.UnitsPerPack);
       if (it.ID) {
         html += '<div class="card-actions">';
         html += '<button type="button" class="chip-btn" onclick="startEdit(\'' + escapeHtml(it.ID) + '\')">Edit</button>';
@@ -716,6 +725,8 @@
     document.getElementById("packSize").value = it.PackSize || "";
     document.getElementById("usageWeek").value = it.UsageWeek || "";
     document.getElementById("inStock").value = it.InStock || "";
+    document.getElementById("unitsPerPack").value = it.UnitsPerPack || "";
+    document.getElementById("batchNumber").value = it.BatchNumber || "";
     document.getElementById("reorderLevel").value = it.ReorderLevel || "";
     document.getElementById("toGet").value = it.ToGet || "";
     document.getElementById("toGiveBack").value = it.ToGiveBack || "";
@@ -758,6 +769,8 @@
       packSize: document.getElementById("packSize").value.trim(),
       usageWeek: document.getElementById("usageWeek").value.trim(),
       inStock: document.getElementById("inStock").value.trim(),
+      unitsPerPack: document.getElementById("unitsPerPack").value.trim(),
+      batchNumber: document.getElementById("batchNumber").value.trim(),
       reorderLevel: document.getElementById("reorderLevel").value.trim(),
       toGet: document.getElementById("toGet").value.trim(),
       toGiveBack: document.getElementById("toGiveBack").value.trim(),
